@@ -1,4 +1,4 @@
-# Emotion Detector AI 😊
+# Emotion Detector AI 
 
 A simple AI based web application that detects human emotions using camera capture.
 
