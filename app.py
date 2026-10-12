@@ -1,46 +1,62 @@
 import streamlit as st
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, WebRtcMode
 from deepface import DeepFace
 import cv2
-import numpy as np
+import av
 
 st.set_page_config(page_title="Live Emotion Detector AI", page_icon="🎭", layout="centered")
 
 st.title("🎭 Live Real-Time Emotion Detector AI")
-st.write("Allow camera access below to detect your emotions live!")
+st.write("Keep your face centered and clearly lit in front of the lens!")
 
-# Mapping emotions to emojis
+# Global dictionary mapping labels to visual emojis
 emoji_map = {
     "happy": "😊", "sad": "😢", "angry": "😠", 
     "surprise": "😲", "neutral": "😐", "fear": "😨", "disgust": "🤢"
 }
 
-class EmotionTransformer(VideoTransformerBase):
-    def transform(self, frame):
-        # Convert the incoming video frame into an OpenCV BGR image array
+class EmotionProcessor(VideoProcessorBase):
+    def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
+        # Convert incoming frame to standard OpenCV BGR matrix
         img = frame.to_ndarray(format="bgr24")
         
         try:
-            # DeepFace analyzes the current frame directly from the video stream
-            result = DeepFace.analyze(
+            # Run DeepFace analysis directly on the frame image matrix
+            results = DeepFace.analyze(
                 img_path=img,
                 actions=['emotion'],
-                enforce_detection=False
+                enforce_detection=True  # Find tracking anchors first
             )
             
-            # Extract dominant emotion
-            dominant_emotion = result['dominant_emotion']
-            emoji = emoji_map.get(dominant_emotion, "🙂")
-            text = f"{dominant_emotion.capitalize()} {emoji}"
-            
-            # Draw the detected emotion text straight onto the video frame screen
-            cv2.putText(img, text, (40, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 3, cv2.LINE_AA)
-            
+            # CRITICAL FIX: DeepFace outputs an evaluation array list format
+            if isinstance(results, list) and len(results) > 0:
+                analysis = results[0]  # Read the primary target dictionary out of the list container
+                dominant_emotion = analysis['dominant_emotion']
+                emoji = emoji_map.get(dominant_emotion, "🙂")
+                display_text = f"{dominant_emotion.capitalize()} {emoji}"
+                
+                # Extract face coordinates to draw tracking box layout
+                region = analysis['region']
+                x, y, w, h = region['x'], region['y'], region['w'], region['h']
+                
+                # Draw the tracking bounding box and label onto screen matrix
+                cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                cv2.putText(img, display_text, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2, cv2.LINE_AA)
+                
         except Exception as e:
-            # If a frame fails to process, pass it through seamlessly without breaking the stream
-            pass
+            # Display background diagnostic loop info rather than crashing out completely
+            cv2.putText(img, "Looking for face...", (30, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2, cv2.LINE_AA)
             
-        return img
+        return av.VideoFrame.from_ndarray(img, format="bgr24")
 
-# Spin up the live WebRTC video streamer widget interface
-webrtc_streamer(key="emotion-detection-stream", video_transformer_factory=EmotionTransformer)
+# Initialize WebRTC Stream Component with secure global STUN configurations
+webrtc_streamer(
+    key="live-emotion-detection",
+    mode=WebRtcMode.SENDRECV,
+    video_processor_factory=EmotionProcessor,
+    rtc_configuration={
+        "iceServers": [{"urls": ["stun:://google.com"]}]
+    },
+    media_stream_constraints={"video": True, "audio": False},
+    async_processing=True
+)
