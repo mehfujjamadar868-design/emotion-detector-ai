@@ -10,3 +10,7 @@ pillow
 retina-face
 gdown
 fire
+streamlit
+opencv-python-headless
+numpy
+tensorflow
