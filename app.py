@@ -1,68 +1,46 @@
-from flask import Flask, render_template, request, jsonify
+import streamlit as st
 from deepface import DeepFace
-import os
-import base64
-from datetime import datetime
+import numpy as np
+import cv2
 
-app = Flask(__name__)
 
-UPLOAD_FOLDER = "uploads"
+st.set_page_config(page_title="Emotion Detector AI", page_icon="🎭", layout="centered")
 
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER)
+st.title("🎭 Emotion Detector AI")
+st.write("Upload an image below to let the AI analyze and detect the emotional state.")
 
-@app.route('/')
-def home():
-    return render_template('index.html')
 
-@app.route('/analyze', methods=['POST'])
-def analyze():
+uploaded_file = st.file_uploader("Choose an image profile...", type=["jpg", "jpeg", "png"])
 
-    image = request.json['image']
-
-    image_data = image.split(",")[1]
-
-    filename = f"{datetime.now().strftime('%Y%m%d%H%M%S')}.png"
-
-    filepath = os.path.join(UPLOAD_FOLDER, filename)
-
-    with open(filepath, "wb") as f:
-        f.write(base64.b64decode(image_data))
-
-    try:
-
-        result = DeepFace.analyze(
-            img_path=filepath,
-            actions=['emotion'],
-            enforce_detection=False
-        )
-
-        emotion = result[0]['dominant_emotion']
-
-        emoji_map = {
-            "happy": "😊",
-            "sad": "😢",
-            "angry": "😠",
-            "surprise": "😲",
-            "neutral": "😐",
-            "fear": "😨",
-            "disgust": "🤢"
-        }
-
-        emoji = emoji_map.get(emotion, "🙂")
-
-        return jsonify({
-            "success": True,
-            "emotion": emotion.capitalize(),
-            "emoji": emoji
-        })
-
-    except Exception as e:
-
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        })
-
-if __name__ == '__main__':
-    app.run(debug=True)
+if uploaded_file is not None:
+    
+    file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
+    opencv_image = cv2.imdecode(file_bytes, 1)
+    
+    
+    st.image(opencv_image, channels="BGR", caption="Uploaded Image", use_container_width=True)
+    
+   
+    if st.button("Analyze Emotion 🚀"):
+        with st.spinner("Analyzing facial expressions..."):
+            try:
+               
+                result = DeepFace.analyze(
+                    img_path=opencv_image,
+                    actions=['emotion'],
+                    enforce_detection=False
+                )
+                
+                dominant_emotion = result[0]['dominant_emotion']
+                
+               
+                emoji_map = {
+                    "happy": "😊", "sad": "😢", "angry": "😠", 
+                    "surprise": "😲", "neutral": "😐", "fear": "😨", "disgust": "🤢"
+                }
+                emoji = emoji_map.get(dominant_emotion, "🙂")
+                
+                st.success(f"**Detected Emotion:** {dominant_emotion.capitalize()} {emoji}")
+                
+            except Exception as e:
+                st.error(f"Analysis failed: {str(e)}")
