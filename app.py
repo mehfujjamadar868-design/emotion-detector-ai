@@ -25,12 +25,12 @@ class EmotionProcessor(VideoProcessorBase):
             results = DeepFace.analyze(
                 img_path=img,
                 actions=['emotion'],
-                enforce_detection=True  # Find tracking anchors first
+                enforce_detection=True
             )
             
-            # CRITICAL FIX: DeepFace outputs an evaluation array list format
+            # DeepFace outputs an evaluation array list format
             if isinstance(results, list) and len(results) > 0:
-                analysis = results[0]  # Read the primary target dictionary out of the list container
+                analysis = results[0]  # Safely read the primary target dictionary out of the list container
                 dominant_emotion = analysis['dominant_emotion']
                 emoji = emoji_map.get(dominant_emotion, "🙂")
                 display_text = f"{dominant_emotion.capitalize()} {emoji}"
@@ -49,14 +49,11 @@ class EmotionProcessor(VideoProcessorBase):
             
         return av.VideoFrame.from_ndarray(img, format="bgr24")
 
-# Initialize WebRTC Stream Component with secure global STUN configurations
+# FIXED: Simplified initialization layout. Streamlit will use default working ICE configurations automatically.
 webrtc_streamer(
     key="live-emotion-detection",
     mode=WebRtcMode.SENDRECV,
     video_processor_factory=EmotionProcessor,
-    rtc_configuration={
-        "iceServers": [{"urls": ["stun:://google.com"]}]
-    },
     media_stream_constraints={"video": True, "audio": False},
     async_processing=True
 )
