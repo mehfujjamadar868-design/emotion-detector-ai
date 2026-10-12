@@ -1,46 +1,46 @@
 import streamlit as st
+from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
 from deepface import DeepFace
-import numpy as np
 import cv2
+import numpy as np
 
+st.set_page_config(page_title="Live Emotion Detector AI", page_icon="🎭", layout="centered")
 
-st.set_page_config(page_title="Emotion Detector AI", page_icon="🎭", layout="centered")
+st.title("🎭 Live Real-Time Emotion Detector AI")
+st.write("Allow camera access below to detect your emotions live!")
 
-st.title("🎭 Emotion Detector AI")
-st.write("Upload an image below to let the AI analyze and detect the emotional state.")
+# Mapping emotions to emojis
+emoji_map = {
+    "happy": "😊", "sad": "😢", "angry": "😠", 
+    "surprise": "😲", "neutral": "😐", "fear": "😨", "disgust": "🤢"
+}
 
+class EmotionTransformer(VideoTransformerBase):
+    def transform(self, frame):
+        # Convert the incoming video frame into an OpenCV BGR image array
+        img = frame.to_ndarray(format="bgr24")
+        
+        try:
+            # DeepFace analyzes the current frame directly from the video stream
+            result = DeepFace.analyze(
+                img_path=img,
+                actions=['emotion'],
+                enforce_detection=False
+            )
+            
+            # Extract dominant emotion
+            dominant_emotion = result['dominant_emotion']
+            emoji = emoji_map.get(dominant_emotion, "🙂")
+            text = f"{dominant_emotion.capitalize()} {emoji}"
+            
+            # Draw the detected emotion text straight onto the video frame screen
+            cv2.putText(img, text, (40, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 3, cv2.LINE_AA)
+            
+        except Exception as e:
+            # If a frame fails to process, pass it through seamlessly without breaking the stream
+            pass
+            
+        return img
 
-uploaded_file = st.file_uploader("Choose an image profile...", type=["jpg", "jpeg", "png"])
-
-if uploaded_file is not None:
-    
-    file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
-    opencv_image = cv2.imdecode(file_bytes, 1)
-    
-    
-    st.image(opencv_image, channels="BGR", caption="Uploaded Image", use_container_width=True)
-    
-   
-    if st.button("Analyze Emotion 🚀"):
-        with st.spinner("Analyzing facial expressions..."):
-            try:
-               
-                result = DeepFace.analyze(
-                    img_path=opencv_image,
-                    actions=['emotion'],
-                    enforce_detection=False
-                )
-                
-                dominant_emotion = result[0]['dominant_emotion']
-                
-               
-                emoji_map = {
-                    "happy": "😊", "sad": "😢", "angry": "😠", 
-                    "surprise": "😲", "neutral": "😐", "fear": "😨", "disgust": "🤢"
-                }
-                emoji = emoji_map.get(dominant_emotion, "🙂")
-                
-                st.success(f"**Detected Emotion:** {dominant_emotion.capitalize()} {emoji}")
-                
-            except Exception as e:
-                st.error(f"Analysis failed: {str(e)}")
+# Spin up the live WebRTC video streamer widget interface
+webrtc_streamer(key="emotion-detection-stream", video_transformer_factory=EmotionTransformer)
